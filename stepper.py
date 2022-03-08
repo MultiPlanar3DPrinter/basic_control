@@ -2,14 +2,13 @@
 import RPi.GPIO as GPIO
 import time
 import math
+from . import optical
 
 
 ROTATER_LENGTH = 10
 DEG_PER_STEP = 1.8
 TURN_GEAR_RATIO = 2
-TILT_GEAR_RATIO = 2*3
-
-
+TILT_GEAR_RATIO = 2*4
 
 
 def cleanup(steppers):
@@ -19,8 +18,12 @@ def cleanup(steppers):
 
 
 class Stepper:
-    def __init__(self, pins, half_steps=False):
+    def __init__(self, pins, half_steps=False, *, max_pos=None, min_pos=None, optical=None):
         self.pins = pins
+        self.optical = optical
+        self.pos = None
+        self.max_pos = max_pos
+        self.min_pos = min_pos
         self._setup()
         self.disable()
         if half_steps:
@@ -44,6 +47,9 @@ class Stepper:
             self.sequence = sequence
             self.scale = 1
 
+    def _scaled_pos(self):
+        return self.pos / self.scale
+    
     def _setup(self):
         for pin in self.pins:
             GPIO.setup(pin, GPIO.OUT)
@@ -52,6 +58,32 @@ class Stepper:
         self.cur_idx = None
         for pin in self.pins:
             GPIO.output(pin, GPIO.LOW)
+
+    def zero(self):
+        def _rotate(this, steps):
+            if steps < 0:
+                sign = -1
+            else:
+                sign = 1
+            steps = sign * steps * this.scale
+
+            for _ in range(steps):
+                this._update_seq_idx(sign)
+                this._output_at_seq_idx(this.cur_idx)
+                # change this carefully, might encounter mechanical (motor) limit
+                time.sleep(0.008)
+                if this.optical.read():
+                    return True
+            return False
+
+        path = 50
+        while not _rotate(self, path):
+            if path < 0:
+                path = -2*path + 25
+            else:
+                path = -2*path - 25
+        
+        self.pos = 0
 
     def hold(self):
         self.cur_idx = None
@@ -74,7 +106,7 @@ class Stepper:
         elif (self.cur_idx < 0):
             self.cur_idx = seq_len - 1
 
-    def rotate(self, steps):
+    def _rotate(self, steps):
         if steps < 0:
             sign = -1
         else:
@@ -86,17 +118,31 @@ class Stepper:
 
         for _ in range(steps):
             self._update_seq_idx(sign)
+            self.pos += sign;
             self._output_at_seq_idx(self.cur_idx)
 
             # change this carefully, might encounter mechanical (motor) limit
             time.sleep(0.008)
+    
+    def rotate(self, steps):
+        new_pos = self._scaled_pos() + steps
+        if new_pos > self.max_pos or new_pos < self.min_pos:
+            return False
+        self._rotate(steps)
+        return True
+
+    def turn_to(self, steps_from_zero):
+        if steps_from_zero > self.max_pos or steps_from_zero < self.min_pos:
+            return False
+        self._rotate(steps_from_zero - self._scaled_pos())
+        return True
 
 
 def angle(turn_stepper, tilt_stepper, i, j, k):
     alpha = math.atan2(i, j)
     beta = math.asin(k/ROTATER_LENGTH)
-    turn_stepper.rotate(alpha*TURN_GEAR_RATIO/DEG_PER_STEP)
-    tilt_stepper.rotate(beta*TILT_GEAR_RATIO/DEG_PER_STEP)
+    turn_stepper.turn_to(alpha*TURN_GEAR_RATIO/DEG_PER_STEP)
+    tilt_stepper.turn_to(beta*TILT_GEAR_RATIO/DEG_PER_STEP)
 
 
 def main():
@@ -115,7 +161,9 @@ def main():
     print("will run in 0.5s")
     time.sleep(0.5)
     try:
-        angle(turn, tilt, 0, 0, 0)
+        turn.zero()
+        tilt.zero()
+        angle(turn, tilt, 0, 0, 10)
     except KeyboardInterrupt:
         cleanup([turn, tilt])
         exit( 1 )
