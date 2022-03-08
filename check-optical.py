@@ -3,23 +3,24 @@
 import RPi.GPIO as GPIO
 
 
-in_pin = 4
-
-
-def setup():
-    GPIO.setmode( GPIO.BCM )
-    GPIO.setup( in_pin, GPIO.IN )
-
-
-def read():
-    return GPIO.input(in_pin)
+class OpticalSensor:
+    def __init__(self, pin):
+        self.pin = pin
+        self._setup()
+    
+    def _setup(self):
+        GPIO.setup(self.pin, GPIO.IN)
+    
+    def read(self):
+        return GPIO.input(self.pin)
 
 
 def main():
-    setup()
+    GPIO.setmode( GPIO.BCM )
+    sensor = OpticalSensor(4)
     try:
         while (True):
-            print(read())
+            print(sensor.read())
     except:
         pass
     finally:
