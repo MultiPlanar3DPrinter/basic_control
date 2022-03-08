@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Run with: ./check-optical.py | grep <0|1>
+# Run with: ./optical.py | grep <0|1>
 import RPi.GPIO as GPIO
 
 
