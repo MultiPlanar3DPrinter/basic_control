@@ -2,7 +2,7 @@
 import RPi.GPIO as GPIO
 import time
 import math
-from . import optical
+from optical import OpticalSensor
 
 
 ROTATER_LENGTH = 10
@@ -76,6 +76,7 @@ class Stepper:
                     return True
             return False
 
+        self.cur_idx = 0
         path = 50
         while not _rotate(self, path):
             if path < 0:
@@ -122,7 +123,7 @@ class Stepper:
             self._output_at_seq_idx(self.cur_idx)
 
             # change this carefully, might encounter mechanical (motor) limit
-            time.sleep(0.008)
+            time.sleep(5)
     
     def rotate(self, steps):
         new_pos = self._scaled_pos() + steps
@@ -156,20 +157,25 @@ def main():
     # STEP_PINS = [17, 27, 22, 23]
 
     GPIO.setmode(GPIO.BCM)
-    turn = Stepper(STEP_PINS, half_steps=True)
-    tilt = Stepper(None, half_steps=True)
+    turn = Stepper([17, 23, 27, 22], half_steps=True, optical=OpticalSensor(10))
+    tilt = Stepper([14, 2, 4, 3], half_steps=True, optical=OpticalSensor(11))
     print("will run in 0.5s")
     time.sleep(0.5)
     try:
-        turn.zero()
-        tilt.zero()
-        angle(turn, tilt, 0, 0, 10)
+        print("running")
+        # turn.zero()
+        # tilt.zero()
+        # angle(turn, tilt, 0, 0, 10)
+        # turn.pos = 0
+        # turn._rotate(100)
+        tilt.pos = 0
+        tilt._rotate(100)
+        print("done")
+        while True:
+            pass
     except KeyboardInterrupt:
         cleanup([turn, tilt])
         exit( 1 )
-
-    cleanup([turn, tilt])
-    exit( 0 )
 
 
 if __name__ == "__main__":
